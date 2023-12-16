@@ -1,8 +1,8 @@
-''' Module with regression functions '''
+''' Module with regression functionalities '''
 import numpy as np
-from scipy.special import gamma
 from scipy.special import loggamma
 from scipy.integrate import quad
+import matplotlib.pyplot as plt
 
 def P(chisq_min: float, nu: int) -> float:
     ''' P-value test: the probability that chi_sq is greater than chisq_min. '''
@@ -12,6 +12,13 @@ def P(chisq_min: float, nu: int) -> float:
         log_X = (nu/2.-1.)*np.log(chisq) - chisq/2. - (nu/2.)*np.log(2.) - loggamma(nu/2.)
         return np.exp(log_X)
     return quad(X, chisq_min, np.inf)
+
+def calculate_D(normalized_resid):
+    ''' The Durbin-Watson statistic for the fit '''
+    numerator   = np.sum( (normalized_resid[1:] - normalized_resid[:-1])**2 )
+    denominator = np.sum( normalized_resid**2 )
+    D = numerator / denominator
+    return D
 
 class LinReg:
     ''' Performs linear regression of a 1D function.
@@ -78,46 +85,80 @@ class LinReg:
         D = numerator / denominator
         return D
 
+class PolyReg:
+    ''' Performs polynomial regression of a 1D function.
+        Allows for uncertainty on the dependent variable.
+    '''
+    def __init__(self, x, y, y_uncertainty, polydeg: set[int]):
+        ''' x: array of independent variables
+            y: array of dependent variables
+            y_uncertainty: array of uncertainties on the dependent variables
+            polydeg: set of polynomial degrees desired in the fit
+        '''
+        # Need to keep track of order of coefficients
+        polydeg = sorted(list(polydeg))
 
-def test_P():
-    print(f'{P(11.3, 5) = }')
-    print(f'{P(32.6, 20) = }')
-    print(f'{P(128., 100) = }')
-    print(f'{P(20., 20) = }')
-    print(f'{P(26.3, 20) = }')
+        # Number of degrees of freedom
+        self.nu = x.size - len(polydeg)
+        
+        # Save copies
+        self.x = x
+        self.y = y
+        self.y_uncert = y_uncertainty
+        self.polydeg = polydeg
 
-def test_LinReg():
-    numpoints = 100
-    stdev = 0.05
-    x = np.linspace(0., 10., numpoints)
-    y = 1. + x + 0.001*x**2 + np.random.normal(0., stdev, size=numpoints)
-    y_uncertainty = stdev * np.ones_like(x)
+        # Calculate params
+        self.params = self._calculate_params()
+        # Calculate residuals
+        self.normalized_resid = (self.y - self.best_fit(self.x)) / self.y_uncert
+        # Minimum chisq
+        self.chisq_min = np.sum( self.normalized_resid**2 )
+        # The Durbin-Watson statistic for the fit
+        self.D = calculate_D(self.normalized_resid)
+        # The P value for the fit
+        self.P = P(self.chisq_min, self.nu)
 
-    linreg = LinReg(x, y, y_uncertainty)
+
+    def _calculate_params(self):
+        ''' Calculate fit parameters with proper uncertainties. '''
+
+        w = self.y_uncert**-2
+
+        gamma = np.array( [w * self.y * self.x**deg for deg in self.polydeg] ).sum(axis=-1)
+
+        A = np.array( [[w * self.x**(deg1+deg2) for deg1 in self.polydeg] for deg2 in self.polydeg] ).sum(axis=-1)
+
+        params_values = np.linalg.solve(A, gamma)
+
+        params_uncert = np.sqrt(np.diag(np.linalg.inv(A)))
+
+        params = {self.polydeg[i] : (params_values[i], params_uncert[i]) for i in range(len(self.polydeg))}
+
+        return params
+
+    def best_fit(self, x_input):
+        ''' Calculate correspding values for x_input according to best fit '''
+        x_input = np.asarray(x_input)
+
+        y_pred = np.zeros_like(x_input)
+
+        for deg in self.params:
+            y_pred += self.params[deg][0] * x_input**deg
+
+        return y_pred
+
+    def plot(self):
+        ''' Plot the data, fit and residuals '''
+        fig, ax = plt.subplots(2, 1, sharex=True)
+
+        ax[0].errorbar(self.x, self.y, yerr=self.y_uncert, capsize=2., marker='.', markersize=3., ls='none', zorder=0)
+        ax[0].plot(self.x, self.best_fit(self.x))
+        ax[0].set_ylabel(r'$y$')
     
-    y_pred = linreg.m[0] * x + linreg.c[0]
-    normalized_resid = (y - y_pred) / y_uncertainty
-
-    print(f'{linreg.c = }')
-    print(f'{linreg.m = }')
-    print(f'{linreg.nu = }')
-    print(f'{linreg.chisq_min = }')
-    print(f'{linreg.P = }')
-    print(f'{linreg.D = }')
-
-    import matplotlib.pyplot as plt
-
-    fig, ax = plt.subplots(2, 1, sharex=True)
-    ax[0].errorbar(x, y, yerr=y_uncertainty, capsize=2., marker='.', markersize=3., ls='none', zorder=0)
-    ax[0].plot(x, y_pred)
-    ax[0].set_ylabel(r'$y$')
-
-    ax[1].scatter(x, normalized_resid, marker='.')
-    ax[1].set_xlabel(r'$x$')
-    ax[1].set_ylabel(r'$(y_i-y_\text{fit}(x_i)) / \sigma_i$')
+        ax[1].scatter(self.x, self.normalized_resid, marker='.')
+        ax[1].set_xlabel(r'$x$')
+        ax[1].set_ylabel('normalized residuals')
     
-    plt.show()
-
-if __name__=='__main__':
-    test_LinReg()
-    #test_P()
+        plt.show()
+        
+        return
