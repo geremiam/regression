@@ -17,17 +17,31 @@ def test_PolyReg():
     stdev = 0.1
     x = np.linspace(0., 1., numpoints)
     y = 1. + x + 0.05*x**2 + np.random.normal(0., stdev, size=numpoints)
-    y_uncertainty = stdev * np.ones_like(x)
+    y_uncertainty = stdev
 
     polydeg = {0, 1}
 
     linreg = regression.PolyReg(x, y, y_uncertainty, polydeg)
 
-    print(f'{linreg.params = }')
-    print(f'{linreg.nu = }')
-    print(f'{linreg.chisq_min = }')
-    print(f'{linreg.P = }')
-    print(f'{linreg.D = }')
+    linreg.summary()
+
+    linreg.plot()
+
+    return
+
+def test_PolyReg_2():
+    np.set_printoptions(linewidth=1000)
+    numpoints = 100
+    stdev = np.linspace(0.2, 0.02, numpoints)
+    x = np.linspace(0., 1., numpoints)
+    y = 1. + x + 0.05*x**2 + np.random.normal(0., stdev, size=numpoints)
+    y_uncertainty = stdev
+
+    polydeg = {0, 1, 2}
+
+    linreg = regression.PolyReg(x, y, y_uncertainty, polydeg)
+
+    linreg.summary()
 
     linreg.plot()
 
@@ -64,9 +78,30 @@ def test_LinReg():
 
     plt.show()
 
+def test_compare():
+    numpoints = 100
+    stdev = 0.1
+    x = np.linspace(0., 1., numpoints)
+    y = 1. + x + 0.05*x**2 + np.random.normal(0., stdev, size=numpoints)
+    y_uncertainty = stdev * np.ones_like(x)
+
+    linreg = regression.LinReg(x, y, y_uncertainty)
+
+    print(f'{linreg.c = }')
+    print(f'{linreg.m = }')
+    print(f'{linreg.nu = }')
+    print(f'{linreg.chisq_min = }')
+    print(f'{linreg.P = }')
+    print(f'{linreg.D = }')
+
+    polydeg = {0, 1}
+    linreg = regression.PolyReg(x, y, y_uncertainty, polydeg)
+    linreg.summary()
+
 
 if __name__=='__main__':
-    test_PolyReg()
-    test_LinReg()
+    #test_PolyReg()
+    test_PolyReg_2()
+    #test_LinReg()
     #test_P()
-
+    #test_compare()

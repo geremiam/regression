@@ -20,6 +20,7 @@ def calculate_D(normalized_resid):
     D = numerator / denominator
     return D
 
+
 class LinReg:
     ''' Performs linear regression of a 1D function.
         Allows for uncertainty on the dependent variable.
@@ -27,7 +28,7 @@ class LinReg:
     def __init__(self, x, y, y_uncertainty):
         ''' x: array of independent variables
             y: array of dependent variables
-            y_uncertainty: array of uncertainties on the dependent variables
+            y_uncertainty: float or array of uncertainties on the dependent variables
         '''
         # Number of degrees of freedom
         self.nu = x.size - 2 # There are two parameters in a linear fit
@@ -85,6 +86,7 @@ class LinReg:
         D = numerator / denominator
         return D
 
+
 class PolyReg:
     ''' Performs polynomial regression of a 1D function.
         Allows for uncertainty on the dependent variable.
@@ -124,12 +126,24 @@ class PolyReg:
 
         w = self.y_uncert**-2
 
+        # The optimal parameters are the solution to the linear equation
+        # A @ params = gamma,
+        # where the matrix A and the vector gamma are as defined below
+
         gamma = np.array( [w * self.y * self.x**deg for deg in self.polydeg] ).sum(axis=-1)
 
         A = np.array( [[w * self.x**(deg1+deg2) for deg1 in self.polydeg] for deg2 in self.polydeg] ).sum(axis=-1)
 
+        # Give a warning if A has negative eigenvalues
+        # These seem to happen because of rounding error
+        A_eigvals = np.linalg.eigvalsh(A)
+        A_eigvals_nonpos = A_eigvals[A_eigvals<=0.]
+        if A_eigvals_nonpos.size > 0:
+            print(f'*** Warning *** The matrix A has non-positive eigenvalues {A_eigvals_nonpos}')
+
         params_values = np.linalg.solve(A, gamma)
 
+        # The uncertainties are as follows
         params_uncert = np.sqrt(np.diag(np.linalg.inv(A)))
 
         params = {self.polydeg[i] : (params_values[i], params_uncert[i]) for i in range(len(self.polydeg))}
@@ -146,6 +160,24 @@ class PolyReg:
             y_pred += self.params[deg][0] * x_input**deg
 
         return y_pred
+
+    def summary(self):
+        print('\tSUMMARY')
+
+        print('\n\tFIT PARAMETERS')
+        for deg in self.params:
+            print(f'\tc{deg} = {self.params[deg]}')
+
+        print('\n\tMINIMAL CHI SQUARED AND DEGREES OF FREEDOM')
+        print(f'\tchisq_min = {self.chisq_min}')
+        print(f'\tnu = {self.nu}')
+
+        print('\n\tP-VALUE TEST')
+        print(f'\tP = {self.P}')
+
+        print('\n\tDURBIN-WATSON STATISTIC')
+        print(f'\tD = {self.D}')
+
 
     def plot(self):
         ''' Plot the data, fit and residuals '''
